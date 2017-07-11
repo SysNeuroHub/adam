@@ -49,7 +49,7 @@ end
 %Calculate input weights for world.  Communication between the eye and ret
 %layers with the world are feedforward from the world to the network
 %Weights are based on the circular Von Mises function
-vmfun = @(pos,unit) K.*exp((cos((2*pi/N).*pos-(2*pi/N).*unit)-1)/(sigma^2))+v; %Anon function for world to network weights
+vmfun = @(pos,unit) K.*exp((cos((pos-unit).*(2*pi/N))-1)/(sigma^2))+v; %Anon function for world to network weights
 %Preallocate matrices to size [N,N]
 tempWldRet = zeros(N,N);
 tempWldEye = zeros(N,N);
@@ -71,7 +71,6 @@ net.hed.setInput({net.hid},{temphedw});    %Add wld.hed input here
 
 %=========== Run the simulation ==============
 nSims = 20;
-%Preallocating vectors for true and estimate locations
 for s = 1:nSims
     %Initialise world layers with random delta functions
     r = zeros(1,N);
@@ -84,7 +83,7 @@ for s = 1:nSims
     wld.eye.initialise(r);
     %Add wld.hedinitialise and wld.hed.resp here
     
-    %Record real positions in vectors
+    %Vectors logging real positions
     truRet(s) = realRetPos;
     truEye(s) = realEyePos;
     
@@ -112,63 +111,71 @@ for s = 1:nSims
         %Add noise to the response of ret and eye networks at the first
         %time point, from the world input
          if isFirstTime
-             addNoise(net.ret,N);
-             addNoise(net.eye,N);
-             %Add addNoise(net.hed,i)
+             addNoise(net.ret);
+             addNoise(net.eye);
+             %Add addNoise(net.hed)
          end
          
          est.Ret = pointEstimate(net.ret);
          est.Eye = pointEstimate(net.eye);
          est.Hed = pointEstimate(net.hed);
         
-        %Plot the simulation
-        plotState(net,t,est);
+     %============== Plot the simulation==============%
+        %Plot vector responses of ret, eye, and hed
+        subplot(2,1,1);
+        cla
+        plotState(net.ret,t,'linestyle','r-o','linewidth',4);
+        plotState(net.eye,t,'linestyle','b-o','linewidth',4);
+        plotState(net.hed,t,'linestyle','g-o','linewidth',4);
+        
+        %Plot 2D matrix response of hid
+        subplot(2,1,2);
+        cla
+        plotState(net.hid,t);
     end
     
-    %Vectors of peak estimates
-    estRetLog(s) = est.Ret;
-    estEyeLog(s) = est.Eye;
-    estHedLog(s) = est.Hed;
+    %Vectors logging estimate positions
+    estRet(s) = pointEstimate(net.ret);
+    estEye(s) = pointEstimate(net.eye);
+    estHed(s) = pointEstimate(net.hed);
 end
+
+%========== Statistical Data ===========%
+%Calculate wrapped error
+errRet = err(estRet,truRet);
+errEye = err(estEye,truEye);
+
+%Calculate mean and standard deviation (in matrices of [Ret,Eye])
+meanErr = [mean(errRet),mean(errEye)];
+stdErr = [std(errRet),std(errEye)];
+
+%Plot histogram of errors in a seperate figure (no bin size set as yet)
+figure;
+histogram(errRet);
+hold on
+histogram(errEye);
+
 keyboard;
+end
 
-%====Function to plot the simulation====
 
-function plotState(net,t,est)
-%add a wld input eventually
+%=== Currently having an issue putting these in the class===%
+function error = err(est,true)
+    %Function to determine absolute error
+    estRad = x2rad(est);
+    truRad = x2rad(true);
 
-%Plot ret, eye, and hed responses on the same subplot
-subplot(2,1,1);
-cla
-plot(net.ret.resp,'r-o','linewidth',4);
-hold on;
-plot(net.eye.resp,'b-o','linewidth',4);
-plot(net.hed.resp,'g-o','linewidth',4);
+    errRad = atan2(sin(estRad-truRad),cos(estRad-truRad));
+    error = rad2x(errRad);
+end
 
-%Add line to indicate peak of ret, eye, and hed networks
-%Change to point estimate function (within class) from supp material
-retPos = est.Ret;
-maxVal = max(net.ret.resp);
-plot([retPos retPos],[0 maxVal],'r','linewidth',3);
-eyePos = est.Eye;
-maxVal = max(net.eye.resp);
-plot([eyePos eyePos],[0 maxVal],'b','linewidth',3);
-headPos = est.Hed;
-maxVal = max(net.hed.resp);
-plot([headPos headPos],[0 maxVal],'g','linewidth',3);
-%Add line to indicate point satisfying hed=ret+eye rule
-plot(mod([retPos+eyePos retPos+eyePos],net.ret.nUnits),[0 maxVal],'k:','linewidth',3);
-ylim([0,100]);
+function rad = x2rad(x)
+    %Functon to convert 1-20 scale to radians - change 20 to variable
+    rad = x.*(2*pi)./20;
+end
 
-%Plot hidden layer on seperate subplot
-subplot(2,1,2);
-cla
-surf(net.hid.resp); zlim([0,10])
-
-%Timing of simulation
-if t==1
-    pause(2);
-else
-    pause(0.15);
-end%2./t);
+function x = rad2x(rad)
+    %Functon to convert radians to 1-20 scale - change 20 to variable
+    x = rad.*20./(2*pi);
+end
 

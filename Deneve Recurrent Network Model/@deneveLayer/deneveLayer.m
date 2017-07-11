@@ -69,6 +69,16 @@ classdef deneveLayer < handle
             end
         end
         
+        function rad = x2rad(x)
+            %Functon to convert 1-o.nUnits scale to radians
+            rad = x.*(2*pi)./o.nUnits;
+        end
+        
+        function x = rad2x(rad)
+            %Functon to convert radians to 1-o.nUnits scale
+            x = rad.*o.nUnits./(2*pi);
+        end
+        
         function o = initialise(o,r)
             %Set the initial state of the layer (i.e. activity of each unit)
             o.resp = r;
@@ -79,9 +89,9 @@ classdef deneveLayer < handle
             o.resp = zeros(dim1,dim2);
         end
         
-        function o = addNoise(o,n)
+        function o = addNoise(o)
             %add noise to the response
-            for i = 1:n
+            for i = 1:o.nUnits
             o.resp(i) = poissrnd(o.resp(i));
             end
         end
@@ -138,7 +148,8 @@ classdef deneveLayer < handle
             o.resp = o.resp.^2;
             o.resp = o.resp/(S+mu.*sum(o.resp(:)));
         end
-           function estimate = pointEstimate(o)
+        
+        function estimate = pointEstimate(o)
             %Estimate position based on peak of hill
             %Preallocate matrix
             estimator = zeros(1,o.nUnits);
@@ -150,6 +161,46 @@ classdef deneveLayer < handle
             %Calculate estimate
             e = sum(estimator);
             estimate = mod(phase(e)/(2*pi)*o.nUnits,o.nUnits);
-        end   
+        end
+        
+        %Plot the response
+        function plotState(o,t,varargin)
+            %Parse input
+            p = inputParser;
+            p.addRequired('time');
+            p.addParameter('linestyle',[]);
+            p.addParameter('linewidth',[]);
+            p.parse(t,varargin{:});
+            
+            %Extract values from parser
+            t = p.Results.time;
+            style = p.Results.linestyle;
+            width = p.Results.linewidth;
+            
+            %Plot response
+            if isvector(o.resp);     %If 1D
+                plot(o.resp,style,'linewidth',width);
+                hold on
+                estPos = pointEstimate(o);
+                maxVal = max(o.resp);
+            
+                plot([estPos estPos],[0 maxVal],style,'linewidth',width);
+                ylim([0,100]);
+            
+            else                      %If 2D
+                surf(o.resp); zlim([0,10])
+            end
+            
+            %Only pause once all are plotted
+            if ~isvector(o.resp)
+                if t==1
+                    pause(2)
+                else
+                    pause(0.15);
+                end  %2./t);
+            end
+        end
+        
+            
     end
 end
