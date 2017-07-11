@@ -79,9 +79,11 @@ classdef deneveLayer < handle
             o.resp = zeros(dim1,dim2);
         end
         
-        function o = addNoise(o,i)
+        function o = addNoise(o,n)
             %add noise to the response
+            for i = 1:n
             o.resp(i) = poissrnd(o.resp(i));
+            end
         end
         
         function setEnabled(o,inputName,enabled)

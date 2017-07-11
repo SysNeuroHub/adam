@@ -49,7 +49,7 @@ end
 %Calculate input weights for world.  Communication between the eye and ret
 %layers with the world are feedforward from the world to the network
 %Weights are based on the circular Von Mises function
-vmfun = @(pos,unit) K.*exp((cos(pos-(2*pi/N).*unit)-1)/(sigma^2))+v; %Anon function for world to network weights
+vmfun = @(pos,unit) K.*exp((cos((2*pi/N).*pos-(2*pi/N).*unit)-1)/(sigma^2))+v; %Anon function for world to network weights
 %Preallocate matrices to size [N,N]
 tempWldRet = zeros(N,N);
 tempWldEye = zeros(N,N);
@@ -111,28 +111,30 @@ for s = 1:nSims
         
         %Add noise to the response of ret and eye networks at the first
         %time point, from the world input
-%         if isFirstTime
-%             for i = 1:N
-%                 addNoise(net.ret,i);
-%                 addNoise(net.eye,i);
-%                 %Add addNoise(net.hed,i)
-%             end
-%         end
+         if isFirstTime
+             addNoise(net.ret,N);
+             addNoise(net.eye,N);
+             %Add addNoise(net.hed,i)
+         end
+         
+         est.Ret = pointEstimate(net.ret);
+         est.Eye = pointEstimate(net.eye);
+         est.Hed = pointEstimate(net.hed);
         
         %Plot the simulation
-        plotState(net,t);
+        plotState(net,t,est);
     end
     
     %Vectors of peak estimates
-    estRet(s) = pointEstimate(net.ret);
-    estEye(s) = pointEstimate(net.eye);
-    estHed(s) = pointEstimate(net.hed);
+    estRetLog(s) = est.Ret;
+    estEyeLog(s) = est.Eye;
+    estHedLog(s) = est.Hed;
 end
 keyboard;
 
 %====Function to plot the simulation====
 
-function plotState(net,t)
+function plotState(net,t,est)
 %add a wld input eventually
 
 %Plot ret, eye, and hed responses on the same subplot
@@ -145,11 +147,14 @@ plot(net.hed.resp,'g-o','linewidth',4);
 
 %Add line to indicate peak of ret, eye, and hed networks
 %Change to point estimate function (within class) from supp material
-[maxVal,retPos] = max(net.ret.resp);
+retPos = est.Ret;
+maxVal = max(net.ret.resp);
 plot([retPos retPos],[0 maxVal],'r','linewidth',3);
-[maxVal,eyePos] = max(net.eye.resp);
+eyePos = est.Eye;
+maxVal = max(net.eye.resp);
 plot([eyePos eyePos],[0 maxVal],'b','linewidth',3);
-[maxVal,headPos] = max(net.hed.resp);
+headPos = est.Hed;
+maxVal = max(net.hed.resp);
 plot([headPos headPos],[0 maxVal],'g','linewidth',3);
 %Add line to indicate point satisfying hed=ret+eye rule
 plot(mod([retPos+eyePos retPos+eyePos],net.ret.nUnits),[0 maxVal],'k:','linewidth',3);
