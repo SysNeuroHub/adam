@@ -69,14 +69,26 @@ classdef deneveLayer < handle
             end
         end
         
-        function rad = x2rad(x)
+        
+        %Eventually x will be based on the xlim range, not the size of the
+        %matrix
+        function rad = x2rad(o,x)
             %Functon to convert 1-o.nUnits scale to radians
-            rad = x.*(2*pi)./o.nUnits;
+            rad = x.*(2*pi)./o.size(2);
         end
         
-        function x = rad2x(rad)
+        function x = rad2x(o,rad)
             %Functon to convert radians to 1-o.nUnits scale
-            x = rad.*o.nUnits./(2*pi);
+            x = rad.*o.size(2)./(2*pi);
+        end
+        
+        function error = err(o,est,true)
+            %Function to determine absolute error
+            estRad = x2rad(o,est);
+            truRad = x2rad(o,true);
+
+            errRad = atan2(sin(estRad-truRad),cos(estRad-truRad));
+            error = rad2x(o,errRad);
         end
         
         function o = initialise(o,r)
@@ -95,6 +107,13 @@ classdef deneveLayer < handle
             o.resp(i) = poissrnd(o.resp(i));
             end
         end
+        
+        function vmweight = vmwfun(o,K,sigma,v)
+            %Von mises weight function
+            [i,j] = meshgrid(1:o.nUnits,1:o.nUnits);
+            vmweight = K.*exp((cos((i-j).*(2*pi/o.nUnits))-1)/(sigma^2))+v;
+        end        
+        
         
         function setEnabled(o,inputName,enabled)
             %Allows enabling and disableing of input layers
@@ -164,16 +183,16 @@ classdef deneveLayer < handle
         end
         
         %Plot the response
-        function plotState(o,t,varargin)
-            %Parse input
+        function plotState(o,varargin)
+            %Parse input - change this so that it is one input
+            %('plotArgs',{}) for line styles and widths
+            %Remove time from class, put in deneve
             p = inputParser;
-            p.addRequired('time');
             p.addParameter('linestyle',[]);
             p.addParameter('linewidth',[]);
-            p.parse(t,varargin{:});
+            p.parse(varargin{:});
             
             %Extract values from parser
-            t = p.Results.time;
             style = p.Results.linestyle;
             width = p.Results.linewidth;
             
@@ -191,16 +210,7 @@ classdef deneveLayer < handle
                 surf(o.resp); zlim([0,10])
             end
             
-            %Only pause once all are plotted
-            if ~isvector(o.resp)
-                if t==1
-                    pause(2)
-                else
-                    pause(0.15);
-                end  %2./t);
-            end
         end
-        
-            
+                    
     end
 end
