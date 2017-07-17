@@ -114,6 +114,12 @@ classdef deneveLayer < handle
             vmweight = K.*exp((cos((i-j).*(2*pi/o.nUnits))-1)/(sigma^2))+v;
         end        
         
+        function o = gainfun(o,trough,K,sigma)
+            %For gain function K = 0.8, sigma = 0.4 and v = 0
+            a = (1:o.nUnits);
+            gain = 1 - (K.*exp((cos((a-trough).*(2*pi/o.nUnits))-1)./(sigma^2)));
+            o.resp = o.resp.*gain;
+        end
         
         function setEnabled(o,inputName,enabled)
             %Allows enabling and disableing of input layers
@@ -150,10 +156,10 @@ classdef deneveLayer < handle
                     sz = size(w);
                     %Reshape to a 2D matrix of weights by unit
                     w = reshape(w,prod(sz(1:inDims)),[]);
-                    
+                    r = r(:);
                     for u=1:o.nUnits
                         %Sum response for a given 'neuron'
-                        rIn(u) = rIn(u) + w(:,u)'*r(:);
+                        rIn(u) = rIn(u) + w(:,u)'*r;
                     end
                 end
             end
