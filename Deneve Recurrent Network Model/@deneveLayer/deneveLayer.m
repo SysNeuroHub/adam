@@ -8,13 +8,16 @@ classdef deneveLayer < handle
         name@char;
         input@struct;              %o.input will be a structure, with a handle, a set of weights, and a switch
         resp@double;               %Activity of each unit (response of each neuron) in the population at a given time point
-        
+        log@cell = {};
+        curLog@double = 0;
+        curPag@double = 0;
     end
     
     properties (Dependent)
         size;                      %Size of response matrix
         nInputs;                   %Number of input layers
         nUnits;                    %Number of units in the response matrix
+        nDims;                     %Number of ACTUAL dimensions
     end
     
     methods
@@ -29,6 +32,10 @@ classdef deneveLayer < handle
         %get number of units in the response matrix
         function n = get.nUnits(o)
             n = prod(o.size);
+        end
+        
+        function n = get.nDims(o)
+            n = ndims(o.resp)-isvector(o.resp);
         end
     end
     
@@ -114,12 +121,42 @@ classdef deneveLayer < handle
             vmweight = K.*exp((cos((i-j).*(2*pi/o.nUnits))-1)/(sigma^2))+v;
         end        
         
+        function allocLog(o,nPages,nLogs)
+            o.log = cell(nLogs,1);
+            [o.log{:}] = deal(squeeze(nan([nPages, o.size])));
+        end
+        
         function o = gainfun(o,trough,K,sigma)
             %For gain function K = 0.8, sigma = 0.4 and v = 0
             a = (1:o.nUnits);
             gain = 1 - (K.*exp((cos((a-trough).*(2*pi/o.nUnits))-1)./(sigma^2)));
             o.resp = o.resp.*gain;
         end
+        
+        function o = logState(o,varargin)
+            p = inputParser;
+            p.addParameter('newLog',false);
+            p.parse(varargin{:});
+            
+            if isempty(o.log)
+                error('You must prenfkdsljhf');
+            end
+            %Extract values from parser
+            newLog = p.Results.newLog;
+                    
+            %Use current log, or add one for new log
+            if newLog
+                o.curLog = o.curLog + 1;
+                o.curPag = 0;
+            end 
+            
+            if o.curLog == 0
+               o.curLog = 1;
+            end
+            
+            o.curPag = o.curPag + 1;
+            o.log{o.curLog}(o.curPag,:) = o.resp(:);
+         end
         
         function setEnabled(o,inputName,enabled)
             %Allows enabling and disableing of input layers
@@ -152,10 +189,10 @@ classdef deneveLayer < handle
                     %Only includes input if enabled
                     w = o.input(i).weights;
                     r = o.input(i).layer.resp;
-                    inDims = ndims(r)-isvector(r);
+                    nDims = o.input(i).layer.nDims;
                     sz = size(w);
                     %Reshape to a 2D matrix of weights by unit
-                    w = reshape(w,prod(sz(1:inDims)),[]);
+                    w = reshape(w,prod(sz(1:nDims)),[]);
                     r = r(:);
                     for u=1:o.nUnits
                         %Sum response for a given 'neuron'

@@ -1,4 +1,4 @@
-function [net, wld, out] = deneve(nSims,headon,ploton)
+function [net, wld, out] = deneve(nSims,headon,ploton,gainon)
 
 %Add another input that is plot or not
 %Set constants for functions and loops
@@ -23,6 +23,12 @@ net.hed = deneveLayer('head',1,N);      %Object location relative to the head
 wld.ret = deneveLayer('retinalWorld',1,N);  %Layer to represent world location in retinal coordinates
 wld.eye = deneveLayer('eyeWorld',1,N);      %Layer to represent world location in eye centred coordinates
 wld.hed = deneveLayer('headWorld',1,N);     %Layer to represent world location in head centred coordinates
+
+allocLog(net.ret,nIter,(nSims*N*N))
+allocLog(net.eye,nIter,(nSims*N*N))
+allocLog(net.hed,nIter,(nSims*N*N))
+allocLog(net.hid,nIter,(nSims*N*N))
+
 
 %Set the input weights for each network layer. Weights are symmetric, such that the
 %input weight from neuron A to B is the same as the input weight from B to A
@@ -62,11 +68,13 @@ end
 %=========== Run the simulation ==============
 %nSims = 20;
 %Preallocate matrices
-[truRet,truEye,truHed,estRet,estEye,estHed] = deal(zeros(N,N,nSims));
-            
+[truRet,truEye,truHed] = deal(zeros(N,N,nSims));
+[estRet,estEye,estHed] = deal(zeros(N,N,nSims,nIter));
+       
 for i = 1:N
+    disp(num2str(i));
     for j = 1:N
-        for s = 1:nSims
+        for s = 1:nSims            
             %Initialise world layers with random delta functions
             r = zeros(1,N);
             realRetPos = i;
@@ -125,7 +133,9 @@ for i = 1:N
                 %Add noise to the response of ret and eye networks at the first
                 %time point, from the world input
                  if isFirstTime
-                     gainfun(net.ret,10,Kg,sigmag);
+                     if gainon
+                         gainfun(net.ret,10,Kg,sigmag);
+                     end
                      addNoise(net.ret);
                      addNoise(net.eye);
                      %Only add noise to head input if it is activated
@@ -137,6 +147,11 @@ for i = 1:N
                  est.Ret = pointEstimate(net.ret);
                  est.Eye = pointEstimate(net.eye);
                  est.Hed = pointEstimate(net.hed);
+                 
+                 logState(net.ret,'newLog',isFirstTime);
+                 logState(net.eye,'newLog',isFirstTime);
+                 logState(net.hed,'newLog',isFirstTime);
+                 logState(net.hid,'newLog',isFirstTime);
 
              %============== Plot the simulation==============%
                 %Plot vector responses of ret, eye, and hed
@@ -161,21 +176,19 @@ for i = 1:N
                     end  %2./t);
                 end
 
+                %Matrices for logging estimate positions
+                estRet(i,j,s,t) = pointEstimate(net.ret);
+                estEye(i,j,s,t) = pointEstimate(net.eye);
+                estHed(i,j,s,t) = pointEstimate(net.hed);
             end
-
-            %Vectors logging estimate positions
-            estRet(i,j,s) = pointEstimate(net.ret);
-            estEye(i,j,s) = pointEstimate(net.eye);
-            estHed(i,j,s) = pointEstimate(net.hed);
         end
     end
 end
-
 %========== Statistical Data ===========%
 %Calculate wrapped error
-errRet = err(net.ret,estRet,truRet);
-errEye = err(net.eye,estEye,truEye);
-errHed = err(net.hed,estHed,truHed);
+errRet = err(net.ret,estRet(:,:,:,nIter),truRet);
+errEye = err(net.eye,estEye(:,:,:,nIter),truEye);
+errHed = err(net.hed,estHed(:,:,:,nIter),truHed);
 
 %Outputs
 out.ret = {estRet,truRet,errRet};
