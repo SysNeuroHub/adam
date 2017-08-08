@@ -253,6 +253,25 @@ classdef deneveLayer < handle
                 surf(o.resp); zlim([0,10])
             end
             
+           function heatmapMean(o,err,clim) %not sure if this will work
+                    merr = x2rad(o,err);
+                    radmean = circ_mean(merr,[],3);
+                    mean = rad2x(o,radmean);
+                    this = strcat(o.name, 'mean error');
+                    imagesc(mean,clim);
+                    title(this);
+           end
+
+           function heatmapStd(o,err,clim)
+                    merr = x2rad(o,err);
+                    radstd = circ_std(merr,[],[],3);
+                    std = rad2x(o,radstd);
+                    this = strcat(o.name, 'Std Dev');
+                    imagesc(std,clim);
+                    title(this);
+           end
+
+                       
         end
                     
     end

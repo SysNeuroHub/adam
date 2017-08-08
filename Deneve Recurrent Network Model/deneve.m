@@ -38,11 +38,11 @@ wfun = @(ind) Kw.*exp((cos((2*pi/N).*ind)-1)/sigmaw^2); %Anonymous function for 
 [a,b,c] = meshgrid(1:N,1:N,1:N);
 tempretw = wfun(c-b);
 tempeyew = wfun(c-a);
-temphedw = wfun(c-a-b);
+temphedw = wfun(c-a-b-10);
 
 temphidw{1} = wfun(b-a);
 temphidw{2} = wfun(b-c);
-temphidw{3} = wfun(b-a-c);
+temphidw{3} = wfun(b-a-c-10);
 
 %Calculate input weights for world.  Communication between the eye and ret
 %layers with the world are feedforward from the world to the network
@@ -87,7 +87,7 @@ for i = 1:N
 
             %Switch between delta function and matrix of zeros for head input
             r = zeros(1,N);
-            realHedPos = mod((realRetPos + realEyePos),N);   %Change to bais head
+            realHedPos = mod((realRetPos + realEyePos - 10),N);   %Change to bais head
             if realHedPos == 0         %Set 0 to 20
                 realHedPos = N;
             end
@@ -134,7 +134,7 @@ for i = 1:N
                 %time point, from the world input
                  if isFirstTime
                      if gainon
-                         gainfun(net.ret,10,Kg,sigmag);
+                         gainfun(net.hed,10,Kg,sigmag);
                      end
                      addNoise(net.ret);
                      addNoise(net.eye);
@@ -158,9 +158,9 @@ for i = 1:N
                 if ploton == 1
                     subplot(2,1,1);
                     cla
-                    plotState(net.ret,'linestyle','r-o','linewidth',4);
-                    plotState(net.eye,'linestyle','b-o','linewidth',4);
-                    plotState(net.hed,'linestyle','g-o','linewidth',4);
+                    plotState(net.ret,'linestyle','r-o','linewidth',3);
+                    plotState(net.eye,'linestyle','b-o','linewidth',3);
+                    plotState(net.hed,'linestyle','g-o','linewidth',3);
 
                     %Plot 2D matrix response of hid
                     subplot(2,1,2);
