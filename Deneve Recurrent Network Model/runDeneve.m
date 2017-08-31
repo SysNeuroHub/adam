@@ -1,29 +1,20 @@
 function runDeneve
-%Set the number of simulations
-nSims = 5;
-%Head input switch, 1 for on, 0 for off
-head = 1;
-%Plot simulation switch, 1 for on, 0 for off
-plot = 0;
 
 %Run the deneve function
-
-[netg,wldg,outg] = deneve(nSims,head,plot,1);
-%[netn,wldn,outn] = deneve(nSims,head,plot,0);
-
+[n,est] = deneve('nSims',20,'headWorldOn',true,'plotIt',false,'suppressLayer','retinal','addNoise',true);
 
 %Calculate mean and standard deviation (in matrices of [Ret,Eye])
-mret = x2rad(netg.ret,outg.ret{3});
-meye = x2rad(netg.eye,outg.eye{3});
-mhed = x2rad(netg.hed,outg.hed{3});
+mret = x2rad(n.retinal,est.ret{3});
+meye = x2rad(n.eye,est.eye{3});
+mhed = x2rad(n.head,est.hed{3});
 
-radmean.ret = circ_mean(mret,[],3);
+radmean.retinal = circ_mean(mret,[],3);
 radmean.eye = circ_mean(meye,[],3);
-radmean.hed = circ_mean(mhed,[],3);
+radmean.head = circ_mean(mhed,[],3);
 
-mean.ret = rad2x(netg.ret,radmean.ret);
-mean.eye = rad2x(netg.eye,radmean.eye);
-mean.hed = rad2x(netg.hed,radmean.hed);
+meanEst.ret = rad2x(n.retinal,radmean.retinal);
+meanEst.eye = rad2x(n.eye,radmean.eye);
+meanEst.hed = rad2x(n.head,radmean.head);
 
 % radMeanErr = circ_mean([mret,meye,mhed]);
 % meanErr = rad2x(net.ret,radMeanErr);
@@ -32,44 +23,44 @@ radstd.ret = circ_std(mret,[],[],3);
 radstd.eye = circ_std(meye,[],[],3);
 radstd.hed = circ_std(mhed,[],[],3);
 
-std.ret = rad2x(netg.ret,radstd.ret);
-std.eye = rad2x(netg.eye,radstd.eye);
-std.hed = rad2x(netg.hed,radstd.hed);
+stdEst.ret = rad2x(n.retinal,radstd.ret);
+stdEst.eye = rad2x(n.eye,radstd.eye);
+stdEst.hed = rad2x(n.head,radstd.hed);
 
 %Plot heatmap of means and standard deviations
-clim= minmax(reshape([mean.ret,mean.eye,mean.hed],1,[]));
+clim= minmax(reshape([meanEst.ret,meanEst.eye,meanEst.hed],1,[]));
 figure;
 subplot(2,3,1);
-imagesc(mean.ret,clim);
+imagesc(meanEst.ret,clim);
 title('Ret Mean Error');
 subplot(2,3,2);
-imagesc(mean.eye,clim);
+imagesc(meanEst.eye,clim);
 title('Eye Mean Error');
 subplot(2,3,3);
-imagesc(mean.hed,clim);
+imagesc(meanEst.hed,clim);
 title('Head Mean Error');
 
-clim = minmax(reshape([std.ret,std.eye,std.hed],1,[]));
+clim = minmax(reshape([stdEst.ret,stdEst.eye,stdEst.hed],1,[]));
 subplot(2,3,4);
-imagesc(std.ret,clim);
+imagesc(stdEst.ret,clim);
 title('Ret Std Dev');
 xlabel('eye position');
 ylabel('retinal position');
 subplot(2,3,5);
-imagesc(std.eye,clim);
+imagesc(stdEst.eye,clim);
 title('Eye Std Dev');
 subplot(2,3,6);
-imagesc(std.hed,clim);
+imagesc(stdEst.hed,clim);
 title('Head Std Dev');
 
 keyboard
 
 % %Plot histogram of errors in a seperate figure (no bin size set as yet)
 % figure;
-% h = histogram(mean.ret(:),30);
+% h = histogram(mean.retinal(:),30);
 % hold on
 % histogram(mean.eye(:),h.BinEdges);
-% histogram(mean.hed(:),h.BinEdges);
+% histogram(mean.head(:),h.BinEdges);
 % 
 % keyboard
 
@@ -79,9 +70,9 @@ keyboard
 % neye = x2rad(net.eye,norm.eye.err);
 % nhed = x2rad(net.hed,norm.hed.err);
 % 
-% gret = x2rad(net.ret,gain.ret.err);
+% gret = x2rad(net.ret,gain.retinal.err);
 % geye = x2rad(net.eye,gain.eye.err);
-% ghed = x2rad(net.hed,gain.hed.err);
+% ghed = x2rad(net.hed,gain.head.err);
 % 
 % radstd.nret = circ_std(nret);
 % radstd.neye = circ_std(neye);

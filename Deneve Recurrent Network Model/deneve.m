@@ -1,203 +1,200 @@
-function [net, wld, out] = deneve(nSims,headon,ploton,gainon)
+function [n, out] = deneve(varargin)
 
-%Add another input that is plot or not
-%Set constants for functions and loops
-nIter = 20;
-N = 20;
-Kw = 1;
-sigmaw = 0.37;
-K = 20;
-v = 1;
-sigma = 0.40;
+p = inputParser;
+p.addParameter('nSims',100);
+p.addParameter('nIter',10);
+p.addParameter('headWorldOn',true);
+p.addParameter('addNoise',true);
+p.addParameter('plotIt',false);
+p.addParameter('N',20); %Number of units per dimension
+p.addParameter('suppressLayer',[],@(x) isempty(x) | any(strcmpi({'eye','retinal','head'},x)));
+p.parse(varargin{:});
+p = p.Results;
+
 Kg = 0.8;
 sigmag = 0.4;
 
 %Create layers ("population codes"). All layers are instances of the deneveLayer class.
-%Network layers
-net.hid = deneveLayer('hidden',N,N);    %Hidden layer
-net.ret = deneveLayer('retinal',1,N);   %Object location on the retina
-net.eye = deneveLayer('eye',1,N);       %Eye position signal
-net.hed = deneveLayer('head',1,N);      %Object location relative to the head
+n = deneveNet('myNet');
 
-%World layers
-wld.ret = deneveLayer('retinalWorld',1,N);  %Layer to represent world location in retinal coordinates
-wld.eye = deneveLayer('eyeWorld',1,N);      %Layer to represent world location in eye centred coordinates
-wld.hed = deneveLayer('headWorld',1,N);     %Layer to represent world location in head centred coordinates
+    %Network layers
+addLayer(n,deneveLayer('hidden',p.N,p.N));      %Hidden layer
+addLayer(n,deneveLayer('retinal',1,p.N));       %Visual layer of object on retina position
+addLayer(n,deneveLayer('eye',1,p.N));           %Eye position signal
+addLayer(n,deneveLayer('head',1,p.N));          %Object location relative to the head
 
-allocLog(net.ret,nIter,(nSims*N*N))
-allocLog(net.eye,nIter,(nSims*N*N))
-allocLog(net.hed,nIter,(nSims*N*N))
-allocLog(net.hid,nIter,(nSims*N*N))
+    %World layers
+addLayer(n,deneveLayer('retWorld',1,p.N));      %Layer to represent world location in retinal coordinates
+addLayer(n,deneveLayer('eyeWorld',1,p.N));      %Layer to represent world location in eye centred coordinates
+addLayer(n,deneveLayer('headWorld',1,p.N));     %Layer to represent world location in head centred coordinates
 
+%Allocate memory to log network state
+allocLog(n,p.nIter,p.nSims*p.N*p.N); %Allocates for all layers. Call allocLog on deneveLayer objects directly if you don't want all layers to log
 
-%Set the input weights for each network layer. Weights are symmetric, such that the
-%input weight from neuron A to B is the same as the input weight from B to A
-%weights are stored in temporary variables to be used in inputs
-wfun = @(ind) Kw.*exp((cos((2*pi/N).*ind)-1)/sigmaw^2); %Anonymous function for the bell-shaped input weights
-%Meshgrid which replaced for loops
-[a,b,c] = meshgrid(1:N,1:N,1:N);
-tempretw = wfun(c-b);
-tempeyew = wfun(c-a);
-temphedw = wfun(c-a-b-10);
-
-temphidw{1} = wfun(b-a);
-temphidw{2} = wfun(b-c);
-temphidw{3} = wfun(b-a-c-10);
-
-%Calculate input weights for world.  Communication between the eye and ret
-%layers with the world are feedforward from the world to the network
-%Weights are based on the circular Von Mises function
-%Using class weight function
-tempWldRet = vmwfun(wld.ret,K,sigma,v);
-tempWldEye = vmwfun(wld.eye,K,sigma,v);
-tempWldHed = vmwfun(wld.hed,K,sigma,v);
+%Assign a plot color to each layer
+[n.retinal.plotSetts.lineColor,n.eye.plotSetts.lineColor,n.head.plotSetts.lineColor] = deal([0.8,0,0],[0,0,0.8],[0,0.8,0]);
 
 %Specify the network architecture (who talks to whom?)
-%keep order of inputs consistent across network inputs
-net.hid.setInput({net.ret,net.eye,net.hed},temphidw);
-net.ret.setInput({net.hid,wld.ret},{tempretw,tempWldRet});
-net.eye.setInput({net.hid,wld.eye},{tempeyew,tempWldEye});
+   %Parameters for von Mises connectivity profiles
+retWtPrms = deneveLayer.defaultVMprms('NET2NET');
+eyeWtPrms = deneveLayer.defaultVMprms('NET2NET');
+headWtPrms = deneveLayer.defaultVMprms('NET2NET');
+wldWtPrms = deneveLayer.defaultVMprms('WORLD2NET');
+retWtPrms.dim = 1;          %Feed the retinal input to dim 1 of the hidden layer
+eyeWtPrms.dim = 2;          %Feed the eye input to dim 2 of the hidden layer
+headWtPrms.dim = -1;        %Feed the head input along the diagonal
 
-if headon == 1
-    net.hed.setInput({net.hid,wld.hed},{temphedw,tempWldHed});
+    %Connect the layers
+n.hidden.setInput({n.retinal,n.eye,n.head},'prms',[retWtPrms,eyeWtPrms,headWtPrms]);
+n.retinal.setInput({n.hidden,n.retWorld},'prms',[retWtPrms,wldWtPrms]);
+n.eye.setInput({n.hidden,n.eyeWorld},'prms',[eyeWtPrms,wldWtPrms]);
+if p.headWorldOn
+    n.head.setInput({n.hidden,n.headWorld},'prms',[headWtPrms,wldWtPrms]);
 else
-    net.hed.setInput({net.hid},{temphedw});
+    n.head.setInput(n.hidden,'prms',headWtPrms);
 end
-    
 
-%=========== Run the simulation ==============
-%nSims = 20;
-%Preallocate matrices
-[truRet,truEye,truHed] = deal(zeros(N,N,nSims));
-[estRet,estEye,estHed] = deal(zeros(N,N,nSims,nIter));
-       
-for i = 1:N
+%=========== Run the simulations ==============
+[truRet,truEye,truHed] = deal(zeros(p.N,p.N,p.nSims));
+[estRet,estEye,estHed] = deal(zeros(p.N,p.N,p.nSims,p.nIter));
+for i = 1:p.N
     disp(num2str(i));
-    for j = 1:N
-        for s = 1:nSims            
-            %Initialise world layers with random delta functions
-            r = zeros(1,N);
-            realRetPos = i;
-            r(realRetPos)= 1;
-            wld.ret.initialise(r);
-            r = zeros(1,N);
-            realEyePos = j;
-            r(realEyePos)= 1;
-            wld.eye.initialise(r);
-
-            %Switch between delta function and matrix of zeros for head input
-            r = zeros(1,N);
-            realHedPos = mod((realRetPos + realEyePos - 10),N);   %Change to bais head
-            if realHedPos == 0         %Set 0 to 20
-                realHedPos = N;
-            end
-
-            if headon == 1
-                r(realHedPos) = 1;
-            else
-                r(realHedPos) = 0;
-            end
-            wld.hed.initialise(r);
-
-            %Vectors logging real positions
-            truRet(i,j,s) = realRetPos;
-            truEye(i,j,s) = realEyePos;
-            truHed(i,j,s) = realHedPos;
-
+    for j = 1:p.N
+        for s = 1:p.nSims
             %Reset network layers to zero for each simulation
-            net.ret.reset(1,N);
-            net.eye.reset(1,N);
-            net.hed.reset(1,N);
-            net.hid.reset(N,N);
-
-            for t=1:nIter
-                %Switch between world and hidden layer inputs for ret, eye and hed
-                isFirstTime=t==1;
-                setEnabled(net.ret,net.hid.name,~isFirstTime);
-                setEnabled(net.ret,wld.ret.name,isFirstTime);
-                setEnabled(net.eye,net.hid.name,~isFirstTime);
-                setEnabled(net.eye,wld.eye.name,isFirstTime);
+            n.reset;
+            
+            %Get current scenario
+            realRetPos = i;
+            realEyePos = j;
+            realHedPos = mod((realRetPos + realEyePos - p.N/2)-1,p.N)+1;
+            
+            %Set the retinal stimulus
+            r = zeros(1,p.N);
+            r(realRetPos)= 1;
+            n.retWorld.setResp(r);
+            
+            %Set the current eye position
+            r = zeros(1,p.N);
+            r(realEyePos)= 1;
+            n.eyeWorld.setResp(r);
+            
+            %Switch between delta function and matrix of zeros for head input
+            r = zeros(1,p.N);   
+            if p.headWorldOn
+                r(realHedPos) = 1;
+            end
+            n.headWorld.setResp(r);
+            
+            %Run the simulation
+            for t=1:p.nIter
                 
-                if headon == 1
-                    setEnabled(net.hed,net.hid.name,~isFirstTime);
-                    setEnabled(net.hed,wld.hed.name,isFirstTime);
+                %If we are just starting, read in only the world. 
+                isTimeZero=t==1;
+                setEnabledLayers(n,isTimeZero,p.headWorldOn);
+                
+                %Calculate the new state of the network
+                update(n,isTimeZero);
+ 
+                if isTimeZero
+                    %Apply response suppression if requested
+                    if ~isempty(p.suppressLayer)                      
+                        gainfun(n.(p.suppressLayer),n.(p.suppressLayer).nUnits/2,Kg,sigmag);
+                    end
+                    
+                    %Add noise to the input layers (not the hidden layer)
+                    if p.addNoise
+                        addNoise(n.retinal);
+                        addNoise(n.eye);
+                        addNoise(n.head);
+                    end
                 end
-
-                %Update for each time point to include recurrent inputs
-                normalise = ~isFirstTime;
-                net.hid.update(normalise);
-                net.ret.update(normalise);
-                net.eye.update(normalise);
-                net.hed.update(normalise);
-
-                %Add noise to the response of ret and eye networks at the first
-                %time point, from the world input
-                 if isFirstTime
-                     if gainon
-                         gainfun(net.hed,10,Kg,sigmag);
-                     end
-                     addNoise(net.ret);
-                     addNoise(net.eye);
-                     %Only add noise to head input if it is activated
-                     if headon == 1
-                         addNoise(net.hed);
-                     end
-                 end
-
-                 est.Ret = pointEstimate(net.ret);
-                 est.Eye = pointEstimate(net.eye);
-                 est.Hed = pointEstimate(net.hed);
-                 
-                 logState(net.ret,'newLog',isFirstTime);
-                 logState(net.eye,'newLog',isFirstTime);
-                 logState(net.hed,'newLog',isFirstTime);
-                 logState(net.hid,'newLog',isFirstTime);
-
-             %============== Plot the simulation==============%
+                
+                %============== Plot the simulation==============%
                 %Plot vector responses of ret, eye, and hed
-                if ploton == 1
-                    subplot(2,1,1);
-                    cla
-                    plotState(net.ret,'linestyle','r-o','linewidth',3);
-                    plotState(net.eye,'linestyle','b-o','linewidth',3);
-                    plotState(net.hed,'linestyle','g-o','linewidth',3);
-
+                if p.plotIt
+                    subplot(2,1,1); cla
+                    plotState(n.retinal); hold on
+                    plotState(n.eye);
+                    plotState(n.head);
+                    plot([realHedPos,realHedPos],ylim,':k','lineWidth',3);
+                    
                     %Plot 2D matrix response of hid
-                    subplot(2,1,2);
-                    cla
-                    plotState(net.hid);
+                    subplot(2,1,2); cla
+                    plotState(n.hidden);
                     title(num2str(t));
                     
                     %Pauses for plotting
                     if t==1
-                        pause(2)
+                        pause(1);
                     else
                         pause(0.15);
-                    end  %2./t);
+                    end
                 end
 
-                %Matrices for logging estimate positions
-                estRet(i,j,s,t) = pointEstimate(net.ret);
-                estEye(i,j,s,t) = pointEstimate(net.eye);
-                estHed(i,j,s,t) = pointEstimate(net.hed);
+                %Log true positions
+                truRet(i,j,s) = realRetPos;
+                truEye(i,j,s) = realEyePos;
+                truHed(i,j,s) = realHedPos;
+                
+                %Log point estimates for each layer
+                estRet(i,j,s,t) = pointEstimate(n.retinal);
+                estEye(i,j,s,t) = pointEstimate(n.eye);
+                estHed(i,j,s,t) = pointEstimate(n.head);
+                
+                %Log the current state of each layer
+                logState(n.retinal,'newLog',isTimeZero);
+                logState(n.eye,'newLog',isTimeZero);
+                logState(n.head,'newLog',isTimeZero);
+                logState(n.hidden,'newLog',isTimeZero);
             end
         end
     end
 end
+
 %========== Statistical Data ===========%
 %Calculate wrapped error
-errRet = err(net.ret,estRet(:,:,:,nIter),truRet);
-errEye = err(net.eye,estEye(:,:,:,nIter),truEye);
-errHed = err(net.hed,estHed(:,:,:,nIter),truHed);
+errRet = err(n.retinal,estRet(:,:,:,p.nIter),truRet);
+errEye = err(n.eye,estEye(:,:,:,p.nIter),truEye);
+errHed = err(n.head,estHed(:,:,:,p.nIter),truHed);
 
 %Outputs
 out.ret = {estRet,truRet,errRet};
 out.eye = {estEye,truEye,errEye};
 out.hed = {estHed,truHed,errHed};
 
-
-%keyboard;
+%Plot the tuning curve of the central neuron in the hidden layer
+if p.nSims == 1
+    subplot(2,1,1);
+    resp = reshape(n.hidden.log,p.N,p.N);
+    resp=cell2mat(cellfun(@(x) squeeze(x(end,p.N/2,p.N/2)),resp,'uniformoutput',false));
+    surf(resp);
+    title('Tuning curve of a hidden unit layer');
+    subplot(2,1,2);
+    toPlot = [round(0.35*p.N), round(0.4*p.N) 0.5*p.N];
+    plot(resp(:,toPlot),'linewidth',4);
+end
 end
 
 
-%gain function here
+function setEnabledLayers(n,isTimeZero,headOn)
+
+%Switch between world and hidden layer inputs for ret, eye and hed
+setEnabled(n.retinal,n.hidden.name,~isTimeZero);
+setEnabled(n.retinal,n.retWorld.name,isTimeZero);
+setEnabled(n.eye,n.hidden.name,~isTimeZero);
+setEnabled(n.eye,n.eyeWorld.name,isTimeZero);
+
+if headOn
+    setEnabled(n.head,n.hidden.name,~isTimeZero);
+    setEnabled(n.head,n.headWorld.name,isTimeZero);
+end
+end
+
+function update(n,isTimeZero)
+normalise = ~isTimeZero;
+n.hidden.update(normalise);
+n.retinal.update(normalise);
+n.eye.update(normalise);
+n.head.update(normalise);
+end
