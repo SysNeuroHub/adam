@@ -4,9 +4,9 @@ classdef deneveLayer < handle
     
     properties
         plotSetts = struct('lineColor','r');    %Plot settings to be used for this layer.
-        xferPrms = struct('s',0.1,'mu',0.002);        %Parameters of the transfer/activation function (same for all units)
-        normalise@logical = true;
-        noisy@logical = true;
+        xferPrms = struct('s',0.1,'mu',0.002);  %Parameters of the transfer/activation function (same for all units)
+        normalise@logical = true;               %Switch determining whether the transfer function is used.
+        noisy@logical = true;                   %Switch determining whether the response is noisy
     end
     
     properties (SetAccess = protected)
@@ -49,7 +49,7 @@ classdef deneveLayer < handle
         function o = setInput(o,layer,varargin)
             %Add a new input to the layer. 
             %
-            %INput arguments:
+            %Input arguments:
             %
             %   layer (required): a deneveLayer object or a [1 x N] cell array of layer objects
             %
@@ -221,11 +221,9 @@ classdef deneveLayer < handle
             if isempty(o.log)
                 error('You must prenfkdsljhf');
             end
-            %Extract values from parser
-            newLog = p.Results.newLog;
-            
+
             %Use current log, or add one for new log
-            if newLog
+            if p.Results.newLog
                 o.curLog = o.curLog + 1;
                 o.curPag = 0;
             end
@@ -241,22 +239,29 @@ classdef deneveLayer < handle
         function setEnabled(o,inputName,enabled)
             %Allows enabling and disabling of input layers
             ind = name2ind(o.input,inputName);
+            
+            if isempty(ind)
+                error(['There is no input named ' inputName, ' for the ' o.name, ' layer.']);
+            end
+            
             o.input(ind).enabled = enabled;
         end
         
         function o = update(o)
 
-            %Pool the input from this layer's input layer(s)
-            poolInput(o);
-            
-            %Perform squaring and divisive normalisation
-            if o.normalise
-                transfer(o);
-            end
-            
-            %Use the current values as Poisson means, draw random spike counts for each neuron
-            if o.noisy
-                addNoise(o);
+            if o.nInputs > 0
+                %Pool the input from this layer's input layer(s)
+                poolInput(o);
+                
+                %Perform squaring and divisive normalisation
+                if o.normalise
+                    transfer(o);
+                end
+                
+                %Use the current values as Poisson means, draw random spike counts for each neuron
+                if o.noisy
+                    addNoise(o);
+                end
             end
         end
         
