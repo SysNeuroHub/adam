@@ -5,6 +5,8 @@ classdef deneveLayer < handle
     properties
         plotSetts = struct('lineColor','r');    %Plot settings to be used for this layer.
         xferPrms = struct('s',0.1,'mu',0.002);        %Parameters of the transfer/activation function (same for all units)
+        normalise@logical = true;
+        noisy@logical = true;
     end
     
     properties (SetAccess = protected)
@@ -242,18 +244,19 @@ classdef deneveLayer < handle
             o.input(ind).enabled = enabled;
         end
         
-        function o = update(o,normalise)
-            %Can switch of normalisation, defaults to on
-            if nargin < 2
-                normalise = true;
-            end
-            
+        function o = update(o)
+
             %Pool the input from this layer's input layer(s)
-            o = poolInput(o);
+            poolInput(o);
             
             %Perform squaring and divisive normalisation
-            if normalise
-                o = transfer(o);
+            if o.normalise
+                transfer(o);
+            end
+            
+            %Use the current values as Poisson means, draw random spike counts for each neuron
+            if o.noisy
+                addNoise(o);
             end
         end
         

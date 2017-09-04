@@ -41,20 +41,19 @@ classdef deneveNet < dynamicprops
                 o.layers(i).reset();
             end
         end
- 
+        
+        function o = update(o)
+            %Update all of the layers
+            for i=1:o.nLayers
+                o.layers(i).update();
+            end
+        end
+        
         function allocLog(o,nIter,nSims)
             %Allocate memory to log network state
             for i=1:o.nLayers
                 allocLog(o.layers(i),nIter,nSims);
             end
-        end
-        
-        function plotState(o,varargin)
-
-        end
-        
-        function sim(o)
-            keyboard;
         end
     end
 end

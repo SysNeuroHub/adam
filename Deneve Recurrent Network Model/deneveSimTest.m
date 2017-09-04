@@ -1,4 +1,4 @@
-function [n, out] = deneve(varargin)
+function [n, out] = deneveSimTest(varargin)
 
 p = inputParser;
 p.addParameter('nSims',100);
@@ -57,6 +57,45 @@ else
 end
 
 %% Run simulations using different target and eye positions.
+
+%Attempt to use new sim class
+s = deneveSim(n);
+s.nIter = p.nIter;
+s.nSims = p.nSims;
+s.plotIt = true;
+s.evtFun.plot = @myPlot;
+
+for i = 1:p.N
+    disp(num2str(i));
+    for j = 1:p.N
+        for sInd = 1:p.nSims
+            %Get current scenario
+            realRetPos = i;
+            realEyePos = j;
+            realHedPos = mod((realRetPos + realEyePos - p.N/2)-1,p.N)+1;
+            
+            %Set the retinal stimulus
+            retStim = zeros(1,p.N);
+            retStim(realRetPos)= 1;
+            
+            %Set the current eye position
+            eyeStim = zeros(1,p.N);
+            eyeStim(realEyePos)= 1;
+            
+            %Switch between delta function and matrix of zeros for head input
+            headStim = zeros(1,p.N);   
+            if p.headWorldOn
+                headStim(realHedPos) = 1;
+            end
+            n.headWorld.setResp(headStim);
+            
+            setInitialState(s, [n.retina,n.eye,n.head],{retStim,eyeStim,headStim});
+                        
+            s.run();
+        end
+    end
+end
+
 
 %=========== Run the simulations ==============
 [truRet,truEye,truHed] = deal(zeros(p.N,p.N,p.nSims));
