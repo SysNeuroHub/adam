@@ -8,15 +8,17 @@ classdef deneveNet < dynamicprops
     %See deneveDemo.m for an example of how to define and connect network layers
     %and to run simulations.
     %
-    %The user can gain control at different times during thevsimulation by
+    %The user can gain control at different times during a simulation by
     %assigning callback functions to events (see constructor). Each function
     %should accept a deneveNet object as the sole argument.
+    %
+    %The state of the network can be logged automatically. This is done
+    %within each layer object through the deneveLayer class.
     %
     % See Deneve, Latham, & Pouget (2001), "Efficient computation and cuintegration with noisy population codes."
     properties
         plotIt@logical = false;
         evtFun@struct = struct('preSim',@preSim,'timeZero',@timeZero,'beforeUpdate',@beforeUpdate, 'afterUpdate',@afterUpdate,'plot',@plot); %Structure of function handles for each event
- 
     end
     
     properties (SetAccess = protected)
@@ -58,6 +60,9 @@ classdef deneveNet < dynamicprops
             
             %Store the handle
             o.layers = horzcat(o.layers,layer);
+            
+            %Register that I am the network parent of the layer
+            layer.n = o;
         end
         
         function o = reset(o)
@@ -76,6 +81,11 @@ classdef deneveNet < dynamicprops
         
         function o = update(o)
             %Update all of the layers
+            
+            %Call timunsonerep on all layers
+%             for i=1:o.nLayers
+%                 o.layers(i).bufferResp(); %this becomes t minus one
+%             end
             for i=1:o.nLayers
                 o.layers(i).update();
             end
@@ -102,6 +112,7 @@ classdef deneveNet < dynamicprops
             %will be compatible with a parallel approach (parfor).
             p = inputParser;
             p.addParameter('nIter',10,@(x) isnumeric(x) & x > 0);   %How many network updates should we run?
+            p.addParameter('logState',true,@islogical);
             p.parse(varargin{:});
             p = p.Results;
             
@@ -131,7 +142,9 @@ classdef deneveNet < dynamicprops
                 if o.plotIt, o.evtFun.plot(o); end
                 
                 %Log the current state of the network
-                o.logState(isTimeZero);
+                if p.logState
+                    o.logState(isTimeZero);
+                end
             end
         end
         
