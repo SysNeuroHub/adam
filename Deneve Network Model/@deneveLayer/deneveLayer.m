@@ -1,10 +1,14 @@
-classdef deneveLayer < handle
+classdef deneveLayer < dynamicprops
     % A population code (layer) as used in Deneve, Latham, & Pouget (2001)
     % "Efficient computation and cuintegration with noisy population codes."
     
     properties
         plotSetts = struct('lineColor','r');    %Plot settings to be used for this layer.
-        xferPrms = struct('s',0.1,'mu',0.002);        %Parameters of the transfer/activation function (same for all units)
+        xferPrms = struct('s',0.1,'mu',0.002);  %Parameters of the transfer/activation function (same for all units)
+        normalise@logical = true;               %Switch determining whether the transfer function is used.
+        noisy@logical = true;                   %Switch determining whether the response is noisy
+        evtFun@struct = struct('preNormalisation',@preNormalisation); %Structure of function handles for each event
+        n@deneveNet;                            %Handle to my parent network object (if any)
     end
     
     properties (SetAccess = protected)
@@ -42,12 +46,13 @@ classdef deneveLayer < handle
             o.size = [dim1,dim2];
             o.nUnits = prod(o.size);
             o.resp = zeros(o.size);
+            o.evtFun.preNormalisation = @preNormalisation;
         end
         
         function o = setInput(o,layer,varargin)
             %Add a new input to the layer. 
             %
-            %INput arguments:
+            %Input arguments:
             %
             %   layer (required): a deneveLayer object or a [1 x N] cell array of layer objects
             %
@@ -105,12 +110,12 @@ classdef deneveLayer < handle
             x = rad.*o.size(2)./(2*pi);
         end
         
-        function error = err(o,est,trueLoc)
+        function err = err(o,est,trueLoc)
             %Function to determine absolute error
             estRad = x2rad(o,est);
             truRad = x2rad(o,trueLoc);
             errRad = atan2(sin(estRad-truRad),cos(estRad-truRad));
-            error = rad2x(o,errRad);
+            err = rad2x(o,errRad);
         end
         
         function setResp(o,r)
@@ -174,6 +179,9 @@ classdef deneveLayer < handle
                 case -1
                     %Diagonal requested
                     inds = {l,j+m+o1D.nUnits/2};
+                    
+                      % THIS SHOULD BE LIKE THIS I THINK:
+%                     inds = {l,j};
             end
             
             w = prms.k.*exp((cos((inds{1}-inds{2}).*(2*pi/o1D.nUnits))-1)/(prms.sigma^2))+prms.v;
@@ -194,6 +202,9 @@ classdef deneveLayer < handle
                 case -1
                     %Diagonal requested
                     inds = {m,j+l+o1D.nUnits/2};
+                    
+                    % THIS SHOULD BE LIKE THIS I THINK:
+%                     inds = {m,j+l};
             end
             
             w = prms.k.*exp((cos((inds{1}-inds{2}).*(2*pi/o1D.nUnits))-1)/(prms.sigma^2))+prms.v;
@@ -219,11 +230,9 @@ classdef deneveLayer < handle
             if isempty(o.log)
                 error('You must prenfkdsljhf');
             end
-            %Extract values from parser
-            newLog = p.Results.newLog;
-            
+
             %Use current log, or add one for new log
-            if newLog
+            if p.Results.newLog
                 o.curLog = o.curLog + 1;
                 o.curPag = 0;
             end
@@ -239,21 +248,32 @@ classdef deneveLayer < handle
         function setEnabled(o,inputName,enabled)
             %Allows enabling and disabling of input layers
             ind = name2ind(o.input,inputName);
+            
+            if isempty(ind)
+                error(['There is no input named ' inputName, ' for the ' o.name, ' layer.']);
+            end
+            
             o.input(ind).enabled = enabled;
         end
         
-        function o = update(o,normalise)
-            %Can switch of normalisation, defaults to on
-            if nargin < 2
-                normalise = true;
-            end
-            
-            %Pool the input from this layer's input layer(s)
-            o = poolInput(o);
-            
-            %Perform squaring and divisive normalisation
-            if normalise
-                o = transfer(o);
+        function o = update(o)
+
+            if o.nInputs > 0
+                %Pool the input from this layer's input layer(s)
+                poolInput(o);
+                
+                %Issue the pre-normalisation event (allow user intervention)
+                o.evtFun.preNormalisation(o);
+                
+                %Perform squaring and divisive normalisation
+                if o.normalise
+                    transfer(o);
+                end
+                
+                %Use the current values as Poisson means, draw random spike counts for each neuron
+                if o.noisy
+                    addNoise(o);
+                end
             end
         end
         
@@ -287,9 +307,13 @@ classdef deneveLayer < handle
             o.resp = o.resp/(o.xferPrms.s+o.xferPrms.mu.*sum(o.resp(:)));
         end
         
-        function estimate = pointEstimate(o)
+        function [est,errVal] = pointEstimate(o,truePos)
             %Estimate position based on peak of hill
-            %Generate matrix to sum
+            %If you also want the error, pass in the true position
+          
+            if o.nDims > 1
+                error('Currently only supported for 1D layers.');
+            end
             estimator = zeros(1,o.nUnits);
             for j = 1:o.nUnits
                 estimator(j) = o.resp(j).*exp(1i.*((2*pi)/o.nUnits).*j);
@@ -297,7 +321,14 @@ classdef deneveLayer < handle
             
             %Calculate estimate
             e = sum(estimator);
-            estimate = mod(angle(e)/(2*pi)*o.nUnits,o.nUnits);
+            est = mod(angle(e)/(2*pi)*o.nUnits,o.nUnits);
+            
+            if nargin > 1
+                %Error is also requested
+                errVal = err(o,est,truePos);
+            else
+                errVal = [];
+            end
         end
         
         %Plot the response
@@ -338,6 +369,10 @@ classdef deneveLayer < handle
             imagesc(std,clim);
             title(this);
         end
+        
+        function preNormalisation(o)
+           %Null function. Overload in child class or assign a new fun handle to evtFun 
+        end
     end
     
     methods (Static)
@@ -352,7 +387,7 @@ classdef deneveLayer < handle
                 case 'WORLD2NET'
                     prms.k = 20;
                     prms.sigma = 0.40;
-                    prms.v = 0;
+                    prms.v = 1;
                     prms.dim = 1;
             end  
         end
