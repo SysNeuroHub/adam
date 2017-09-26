@@ -1,6 +1,7 @@
 classdef deneveLayer < dynamicprops
     % A population code (layer) as used in Deneve, Latham, & Pouget (2001)
     % "Efficient computation and cuintegration with noisy population codes."
+    % See deneveDemo.m for usage.
     
     properties
         plotSetts = struct('lineColor','r');    %Plot settings to be used for this layer.
@@ -9,6 +10,7 @@ classdef deneveLayer < dynamicprops
         noisy@logical = true;                   %Switch determining whether the response is noisy
         evtFun@struct = struct('preNormalisation',@preNormalisation); %Structure of function handles for each event
         n@deneveNet;                            %Handle to my parent network object (if any)
+        locked@logical = false;                 %Skip updates on this layer if true
     end
     
     properties (SetAccess = protected)
@@ -21,6 +23,10 @@ classdef deneveLayer < dynamicprops
         log@cell = {};                          %Record of previous logged layer states.
         curLog@double = 0;                      %Admin for the log.
         curPag@double = 0;                      %Ditto.
+    end
+    
+    properties (GetAccess = protected)
+        respBuffer@double;                      %Population response at previous time point.
     end
     
     properties (Dependent)
@@ -215,20 +221,13 @@ classdef deneveLayer < dynamicprops
             [o.log{:}] = deal(squeeze(nan([nPages, o.size])));
         end
         
-        function o = gainfun(o,trough,K,sigma)
-            %For gain function K = 0.8, sigma = 0.4 and v = 0
-            a = (1:o.nUnits);
-            gain = 1 - (K.*exp((cos((a-trough).*(2*pi/o.nUnits))-1)./(sigma^2)));
-            o.resp = o.resp.*gain;
-        end
-        
         function o = logState(o,varargin)
             p = inputParser;
             p.addParameter('newLog',false);
             p.parse(varargin{:});
             
             if isempty(o.log)
-                error('You must prenfkdsljhf');
+                error('You must pre-allocate memory for the log. See deneveLayer.allocLog()');
             end
 
             %Use current log, or add one for new log
@@ -256,9 +255,16 @@ classdef deneveLayer < dynamicprops
             o.input(ind).enabled = enabled;
         end
         
+        function o = bufferResp(o)
+            %Copy the response to the buffer (i.e. we are about to update the network)
+            %This ensures that layers can be udpated in any order without
+            %mixing together the previous and current time-points.
+            o.respBuffer = o.resp;
+        end
+        
         function o = update(o)
 
-            if o.nInputs > 0
+            if o.nInputs > 0 && ~o.locked
                 %Pool the input from this layer's input layer(s)
                 poolInput(o);
                 
@@ -286,7 +292,7 @@ classdef deneveLayer < dynamicprops
                 if o.input(i).enabled
                     %Only includes input if enabled
                     w = o.input(i).weights;
-                    r = o.input(i).layer.resp;
+                    r = o.input(i).layer.respBuffer;
                     nDims = o.input(i).layer.nDims; %#ok<PROP>
                     sz = size(w); %#ok<CPROP>
                     %Reshape to a 2D matrix of weights by unit

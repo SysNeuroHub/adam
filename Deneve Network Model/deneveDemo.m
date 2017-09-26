@@ -8,7 +8,8 @@ p = inputParser;
 p.addParameter('headWorldOn',false);    %Set to true to simulate an auditory stimulus (in addition to the visual stimulus)
 p.addParameter('plotIt',true);          %Plot each iteration.
 p.addParameter('nSims',100);
-p.addParameter('nIter',5);
+p.addParameter('nIter',10);
+p.addParameter('addNoise',true);
 p.addParameter('N',20);                 %Number of units per dimension in each layer
 p.parse(varargin{:});
 p = p.Results;
@@ -16,7 +17,7 @@ p = p.Results;
 %% Build the network
     %For convenience, here we call a function that returns a ready-made model like that used 
     %in the original paper. Go to that function to see how networks are designed and interconnected.
-n = deneveLathamPougetModel('N',p.N);
+n = deneveLathamPougetModel('N',p.N,'addNoise',p.addNoise);
 addprop(n,'p');
 n.p = p;
 n.plotIt = p.plotIt;
@@ -32,11 +33,6 @@ end
 
 %Allocate memory to log network state
 allocLog(n,n.p.nIter,n.p.nSims*n.p.N*n.p.N); %Allocates for all layers. Call allocLog on deneveLayer objects directly if you don't want all layers to log
-
-%We want the network to listen to the world-layers and add noise only at t==1 and not
-%thereafter. So, implement this switch in a custom beforeUpdate() function
-%(specified at the bottom of this script).
-n.evtFun.beforeUpdate = @beforeUpdate;
 
 %Create the function the calcluates the head position from retina and eye
 headPos = @(r,e) mod((r + e - n.p.N/2)-1,n.p.N)+1;
@@ -134,6 +130,7 @@ end
 
 %Plot the tuning curve of the central neuron in the hidden layer
 if p.nSims == 1
+    figure
     subplot(2,1,1);
     resp = reshape(n.basis.log,p.N,p.N);
     resp=cell2mat(cellfun(@(x) squeeze(x(end,p.N/2,p.N/2)),resp,'uniformoutput',false));
@@ -143,7 +140,6 @@ if p.nSims == 1
     toPlot = [round(0.35*p.N), round(0.4*p.N) 0.5*p.N];
     plot(resp(:,toPlot),'linewidth',4);
 end
-
 
 keyboard;
 end
@@ -175,39 +171,4 @@ if n.t==1
 else
     pause(0.15);
 end
-end
-
-function beforeUpdate(n)
-
-%If time zero, switch off all inputs except those coming from world layers
-%Also switch off normalisation/transfer.
-%The opposite thereafter.
-if n.t > 2
-    %Nothing to do. Keep the current settings.
-    return;
-end
-
-isTimeZero = n.t==1;
-
-    %Retina
-setEnabled(n.retinal,n.basis.name,~isTimeZero);
-setEnabled(n.retinal,n.retWorld.name,isTimeZero);
-n.retinal.normalise = ~isTimeZero;
-    %Eye
-setEnabled(n.eye,n.basis.name,~isTimeZero);
-setEnabled(n.eye,n.eyeWorld.name,isTimeZero);
-n.eye.normalise = ~isTimeZero;
-    %Head
-setEnabled(n.head,n.basis.name,~isTimeZero);
-if n.p.headWorldOn
-    setEnabled(n.head,n.headWorld.name,isTimeZero);
-end
-n.head.normalise = ~isTimeZero;
-    %Basis
-setEnabled(n.basis,n.retinal.name,~isTimeZero);
-setEnabled(n.basis,n.eye.name,~isTimeZero);
-setEnabled(n.basis,n.head.name,~isTimeZero);
-
-%Add noise only if this is the first time point
-n.noisy(isTimeZero);
 end

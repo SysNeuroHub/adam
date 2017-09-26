@@ -62,7 +62,7 @@ classdef deneveNet < dynamicprops
             o.layers = horzcat(o.layers,layer);
             
             %Register that I am the network parent of the layer
-            layer.n = o;
+            layer.n = o;            
         end
         
         function o = reset(o)
@@ -80,12 +80,14 @@ classdef deneveNet < dynamicprops
         end
         
         function o = update(o)
-            %Update all of the layers
+            %Update the state of the network.
             
-            %Call timunsonerep on all layers
-%             for i=1:o.nLayers
-%                 o.layers(i).bufferResp(); %this becomes t minus one
-%             end
+            %Buffer the current (soon-to-be-old) responses. This ensures that layers can be updated in any order without mixing together the previous and current time-points.
+            for i=1:o.nLayers
+                o.layers(i).bufferResp();
+            end
+            
+            %Update each layer (pools the buffered responses)
             for i=1:o.nLayers
                 o.layers(i).update();
             end
@@ -115,7 +117,7 @@ classdef deneveNet < dynamicprops
             p.addParameter('logState',true,@islogical);
             p.parse(varargin{:});
             p = p.Results;
-            
+
             %Run pre-sim code (e.g. to set the initial state of some layers)
             o.evtFun.preSim(o);
             

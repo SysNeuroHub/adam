@@ -8,6 +8,7 @@ function n = deneveLathamPougetModel(varargin)
 %layers; the original model had N/2 units along each dimension)
 p=inputParser;
 p.addParameter('N',20);                 %Number of units per dimension in each layer
+p.addParameter('addNoise',true);        %Use noisy population responses
 p.parse(varargin{:});
 p = p.Results;
 
@@ -17,7 +18,7 @@ p = p.Results;
 n = deneveNet('myNet');
 
     %Neural layers
-addLayer(n,deneveLayer('basis',p.N,p.N));     %Basis function layer
+addLayer(n,deneveLayer('basis',p.N,p.N));       %Basis function layer
 addLayer(n,deneveLayer('retinal',1,p.N));       %Visual layer coding object location on the retina
 addLayer(n,deneveLayer('eye',1,p.N));           %Eye position layer coding current direction of gaze
 addLayer(n,deneveLayer('head',1,p.N));          %Object location relative to the head (e.g. auditory)
@@ -47,3 +48,48 @@ n.head.setInput({n.basis,n.headWorld},'prms',[headWtPrms,wldWtPrms]);
 n.retinal.plotSetts.lineColor   = [0.8,0,0];
 n.eye.plotSetts.lineColor       = [0,0,0.8];
 n.head.plotSetts.lineColor      = [0,0.8,0];
+
+%The order in which layers are updated matters. For example, a feedforward
+%network has to be updated in the direction of information flow.
+%Here, we need the input layers to take in the state of the world first
+%(i.e. pool from the "world" layers), then we need to update the basis layer,
+%then update the input layers, then basis etc...
+%So, implement these switches/ordering in a custom beforeUpdate() function (specified at the bottom of this script).
+%This custom script also ensures that noise is added only at t==0 and not thereafter.
+n.evtFun.beforeUpdate = @beforeUpdate;
+
+function beforeUpdate(n)
+
+%This function is called just before each iteration (t) of the network during a simulation
+
+if n.t==1
+    %Update only the input layers
+    n.basis.locked = true;
+    
+    %Switch off response normalisation
+    n.retinal.normalise = false;
+    n.eye.normalise = false;
+    n.head.normalise = false;
+    
+    %Add noise to the responses
+    if n.p.addNoise
+        n.noisy(true);
+    end 
+elseif n.t==2
+    %Update the basis layer only
+    n.basis.locked = false;
+    n.retinal.locked = true;
+    n.eye.locked = true;
+    n.head.locked = true;
+    n.noisy(false);
+    
+elseif n.t==3;
+    %Update and normalise all layers therafter
+    n.basis.locked = false;
+    n.retinal.locked = false;
+    n.eye.locked = false;
+    n.head.locked = false;
+    n.retinal.normalise = true;
+    n.eye.normalise = true;
+    n.head.normalise = true;
+end
