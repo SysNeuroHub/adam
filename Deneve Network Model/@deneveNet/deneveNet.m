@@ -18,7 +18,7 @@ classdef deneveNet < dynamicprops
     % See Deneve, Latham, & Pouget (2001), "Efficient computation and cuintegration with noisy population codes."
     properties
         plotIt@logical = false;
-        evtFun@struct = struct('preSim',@preSim,'timeZero',@timeZero,'beforeUpdate',@beforeUpdate, 'afterUpdate',@afterUpdate,'plot',@plot); %Structure of function handles for each event
+        evtFun@struct = struct('beforeSim',@preSim,'afterSim',@afterSim,'beforeUpdate',@beforeUpdate, 'afterUpdate',@afterUpdate,'plot',@plot); %Structure of function handles for each event
     end
     
     properties (SetAccess = protected)
@@ -119,18 +119,14 @@ classdef deneveNet < dynamicprops
             p = p.Results;
 
             %Run pre-sim code (e.g. to set the initial state of some layers)
-            o.evtFun.preSim(o);
+            o.evtFun.beforeSim(o);
             
             %Run the simulation
             for tInd=1:p.nIter
                 
                 %Set the time
                 o.t = tInd;
-                
-                %Run time-zero function
-                isTimeZero = tInd==1;
-                if isTimeZero, o.evtFun.timeZero(o); end
-                
+                  
                 %Run pre-update code
                 o.evtFun.beforeUpdate(o);
                 
@@ -142,20 +138,24 @@ classdef deneveNet < dynamicprops
                 
                 %Run plotting code
                 if o.plotIt, o.evtFun.plot(o); end
-                
+ 
                 %Log the current state of the network
                 if p.logState
+                    isTimeZero = tInd==1;
                     o.logState(isTimeZero);
                 end
             end
+            
+            %Run post-sim code (e.g. to reset network)
+            o.evtFun.afterSim(o);
         end
         
-        function preSim(o)
+        function beforeSim(o)
             
         end
         
-        function timeZero(o)
-            %To be overloaded in child sims
+        function afterSim(o)
+            
         end
         
         function beforeUpdate(o)

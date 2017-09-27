@@ -57,14 +57,21 @@ n.head.plotSetts.lineColor      = [0,0.8,0];
 %So, implement these switches/ordering in a custom beforeUpdate() function (specified at the bottom of this script).
 %This custom script also ensures that noise is added only at t==0 and not thereafter.
 n.evtFun.beforeUpdate = @beforeUpdate;
+n.evtFun.afterSim = @afterSim;
 
 function beforeUpdate(n)
 
 %This function is called just before each iteration (t) of the network during a simulation
 
+%The organisation of this network means that activity starts in the
+%periphery, then moves to the basis layer, then out again. So these
+%operations implement this flow.
 if n.t==1
-    %Update only the input layers
-    n.basis.locked = true;
+    %Update each input layer with the input from the world
+    n.basis.locked = true;  %Nothing to do with basis layer yet
+    setEnabled(n.retinal,'retWorld',true);
+    setEnabled(n.eye,'eyeWorld',true);
+    setEnabled(n.head,'headWorld',true);
     
     %Switch off response normalisation
     n.retinal.normalise = false;
@@ -76,20 +83,30 @@ if n.t==1
         n.noisy(true);
     end 
 elseif n.t==2
-    %Update the basis layer only
-    n.basis.locked = false;
-    n.retinal.locked = true;
-    n.eye.locked = true;
-    n.head.locked = true;
+    %The stimuli and noise should only be present at t==1, so switch them off now.
     n.noisy(false);
+    setEnabled(n.retinal,'retWorld',false);
+    setEnabled(n.eye,'eyeWorld',false);
+    setEnabled(n.head,'headWorld',false);
     
-elseif n.t==3;
-    %Update and normalise all layers therafter
-    n.basis.locked = false;
-    n.retinal.locked = false;
-    n.eye.locked = false;
-    n.head.locked = false;
+    %Normalise all layers from herein
     n.retinal.normalise = true;
     n.eye.normalise = true;
     n.head.normalise = true;
+end
+
+%The basis layer and the input layers are updated on alternating iterations.
+if n.t > 1
+    lockPeriphery = mod(n.t,2) == 0;
+    n.retinal.locked = lockPeriphery;
+    n.eye.locked = lockPeriphery;
+    n.head.locked = lockPeriphery;
+    n.basis.locked = ~lockPeriphery;
+end
+
+function afterSim(n)
+
+%Unlock all layers
+for i=1:n.nLayers
+    n.layers(i).locked = false;
 end

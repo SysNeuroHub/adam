@@ -19,6 +19,10 @@ p = p.Results;
     %For convenience, here we call a function that returns a ready-made model like that used 
     %in the original paper. Go to that function to see how networks are designed and interconnected.
 n = deneveLathamPougetModel('N',p.N,'addNoise',p.addNoise);
+n.retinal.xferPrms.mu = n.retinal.xferPrms.mu*2; %Taking into account that we are using N*N in basis rather than N/2
+n.eye.xferPrms.mu = n.eye.xferPrms.mu*2;
+n.head.xferPrms.mu = n.head.xferPrms.mu*2;
+
 addprop(n,'p');
 n.p = p;
 n.plotIt = p.plotIt;
@@ -70,7 +74,7 @@ for i = 1:n.p.N
         if n.p.headWorldOn, headStim(wld.headPos(i,j)) = 1; end
             
         %Set callback to reset network and again assign these stimuli to the network's world layers.
-        n.evtFun.preSim = @(n) setStim(n,retStim,eyeStim,headStim);
+        n.evtFun.beforeSim = @(n) setStim(n,retStim,eyeStim,headStim);
         
         %Run the simulation
         for sInd = 1:n.p.nSims
@@ -140,18 +144,18 @@ if p.nSims > 1
 end
 
 %Plot the tuning curve of the central neuron in the hidden layer
-if p.nSims == 1
-    figure;
-    subplot(2,1,1);
-    resp = reshape(n.basis.log,p.nSims,p.N,p.N);
-    resp=cell2mat(cellfun(@(x) squeeze(x(end,p.N/2,p.N/2)),resp,'uniformoutput',false));
-    tuning = squeeze(mean(resp,1));
-    surf(tuning);
-    title('Tuning curve of a hidden unit layer');
-    subplot(2,1,2);
-    toPlot = [round(0.35*p.N), round(0.4*p.N) 0.5*p.N];
-    plot(tuning(:,toPlot),'linewidth',4);
-end
+
+figure;
+subplot(2,1,1);
+resp = reshape(n.basis.log,p.nSims,p.N,p.N);
+resp=cell2mat(cellfun(@(x) squeeze(x(end,p.N/2,p.N/2)),resp,'uniformoutput',false));
+tuning = squeeze(mean(resp,1));
+surf(tuning);
+title('Tuning curve of a hidden unit layer');
+subplot(2,1,2);
+toPlot = [round(0.35*p.N), round(0.4*p.N) 0.5*p.N];
+plot(tuning(:,toPlot),'linewidth',4);
+
 
 keyboard;
 end

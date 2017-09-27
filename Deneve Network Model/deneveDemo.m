@@ -59,7 +59,7 @@ for i = 1:n.p.N
         if n.p.headWorldOn, headStim(wld.headPos(i,j)) = 1; end
         
         %Set callback to reset network and again assign these stimuli to the network's world layers.
-        n.evtFun.preSim = @(n) setStim(n,retStim,eyeStim,headStim);
+        n.evtFun.beforeSim = @(n) setStim(n,retStim,eyeStim,headStim);
         
         %Run the simulation
         for sInd = 1:n.p.nSims
