@@ -11,6 +11,7 @@ classdef deneveLayer < dynamicprops
         evtFun@struct = struct('preNormalisation',@preNormalisation); %Structure of function handles for each event
         n@deneveNet;                            %Handle to my parent network object (if any)
         locked@logical = false;                 %Skip updates on this layer if true
+        poolingRule = 'ADDITIVE';
     end
     
     properties (SetAccess = protected)
@@ -98,6 +99,7 @@ classdef deneveLayer < dynamicprops
                    
                    %Use default parameters for the von-mises, but use the requested dimension
                    p.weights{i} = fun(o,layer{i},p.prms(i));
+
                 end
                 
                 %Add the input object to this layer
@@ -286,25 +288,40 @@ classdef deneveLayer < dynamicprops
         function o = poolInput(o)
             %Pool the input to each unit, across all input layers (o.inLayers is > 1 only for the hidden layer)
             %Uses linear indexing so it can be blind to whether this is a 1D or 2D layer
-            rIn = zeros(o.size);
             
-            for i=1:o.nInputs
-                if o.input(i).enabled
-                    %Only includes input if enabled
-                    w = o.input(i).weights;
-                    r = o.input(i).layer.respBuffer;
-                    nDims = o.input(i).layer.nDims; %#ok<PROP>
-                    sz = size(w); %#ok<CPROP>
-                    %Reshape to a 2D matrix of weights by unit
-                    w = reshape(w,prod(sz(1:nDims)),[]); %#ok<PROP>
-                    r = r(:);
-                    for u=1:o.nUnits
-                        %Sum response for a given 'neuron'
-                        rIn(u) = rIn(u) + w(:,u)'*r;
-                    end
+            %Which input layers are active?
+            inInds = find(arrayfun(@(x) x.enabled,o.input));
+            nEnabled = numel(inInds);
+            
+            rIn = zeros([nEnabled,o.size]);
+            for i=1:nEnabled
+                w = o.input(inInds(i)).weights;
+                r = o.input(inInds(i)).layer.respBuffer;
+                nDims = o.input(inInds(i)).layer.nDims; %#ok<PROP>
+                sz = size(w); %#ok<CPROP>
+                
+                %Reshape to a 2D matrix of weights by unit
+                w = reshape(w,prod(sz(1:nDims)),[]); %#ok<PROP>
+                r = r(:);
+                for u=1:o.nUnits
+                    %Calculate the input to this neuron from this input layer
+                    rIn(i,u) = w(:,u)'*r;
                 end
             end
-            o.resp = rIn;
+            
+            %Combine the input across different sources.
+            switch upper(o.poolingRule)
+                case 'ADDITIVE'
+                    o.resp = sum(rIn,1);
+                case 'MULTIPLICATIVE'
+                    o.resp = prod(rIn,1);
+                otherwise
+                    error(['Unknown pooling rule: ' p.poolingRule]);
+            end
+            
+            %The first dimension is now redundant. Collapse it whie
+            %maintaining original matrix size (squeeze() doesn't work here)
+            o.resp = reshape(o.resp,o.size);
         end
         
         function o = transfer(o)

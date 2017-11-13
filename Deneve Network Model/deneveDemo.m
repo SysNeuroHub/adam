@@ -141,6 +141,17 @@ if p.nSims == 1
     plot(resp(:,toPlot),'linewidth',4);
 end
 
+figure;
+subplot(3,1,1);
+h(1) = histogram(mret(:),10); title('retina');
+subplot(3,1,2);
+h(2) = histogram(meye(:),10); title('eye');
+subplot(3,1,3);
+h(3) = histogram(mhed(:),10); title('head');
+minWidth = max(arrayfun(@(x) x.BinWidth,h));
+set(h,'BinWidth',minWidth);
+xlabel('Decoding error');
+amUnifyAxesAcrossPlots([],'xy');
 keyboard;
 end
 
