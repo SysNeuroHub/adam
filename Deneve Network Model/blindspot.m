@@ -1,4 +1,4 @@
-function [n, out] = blindspot(nSims,ploton,gainon,noiseon)
+function [n, out] = blindspot(nSims,plotIt)
 
 %A recurrent network model of V1 that produces an attractive shift of
 %position codes into the blindspot. Achieved through asymmetric
@@ -8,8 +8,6 @@ function [n, out] = blindspot(nSims,ploton,gainon,noiseon)
 
 nIter = 5;
 N = 100;
-
-Kg = 0.8;
 sigmag = 0.4;
 
 %Create a single layer of neurons that is recurrently connected with itself
@@ -39,6 +37,10 @@ n.retina.setInput({n.retina,n.retinalWorld},'weights',{w,'vonMises'},'prms',[ret
 %Allocate memory to log network state
 allocLog(n,nIter,nSims*N);
 
+n.evtFun.beforeUpdate = @beforeUpdate;
+n.noisy(false);
+n.plotIt = plotIt;
+
 %=========== Run the simulation ==============
 %Preallocate matrices
 truRet= zeros(N,nSims);
@@ -50,63 +52,26 @@ for i = 1:N
         n.reset();
         
         %Initialise world layers with random delta functions
-        realRetPos = i;
+        truRet(i,s) = i;        
         r=zeros(1,N);
-        r(realRetPos)= 1;
+        r(truRet(i,s))= 1;
         n.retinalWorld.setResp(r);
-        
-        %Vectors logging real positions
-        truRet(i,s) = realRetPos;
 
-        for t=1:nIter
-            %Switch between world and hidden layer inputs for ret, eye and hed
-            isTimeZero=t==1;
-            setEnabled(n.retina,n.retina.name,~isTimeZero);
-            setEnabled(n.retina,n.retinalWorld.name,isTimeZero);
-            
-            %Update for each time point to include recurrent inputs
-            normalise = ~isTimeZero;
-            n.retina.update(normalise);
-            
-            %Add noise to the response
-            if isTimeZero
-                if gainon
-                    gainfun(n.retina,N/2,Kg,sigmag);
-                end
-                if noiseon
-                    addNoise(n.retina);
-                end
-            end
-           
-            logState(n.retina,'newLog',isTimeZero);
-            
-            %============== Plot the simulation==============%
-            %Plot vector responses of ret, eye, and hed
-            if ploton == 1
-                cla
-                plotState(n.retina);
-                title(num2str(t));
-                
-                %Pauses for plotting
-                if t==1
-                    pause(2)
-                else
-                    pause(0.15);
-                end
-            end
-            
-            %Matrices for logging estimate positions
-            estRet(i,s,t) = pointEstimate(n.retina);
-        end
+        %Vectors logging real positions
+        plotThisOne = @(n) myPlot(n,truRet(i,s));
+        n.evtFun.plot = plotThisOne;
         
+        %Run the simulation
+        n.run('nIter',nIter);
         
-        %Calculate a point estimate
+        %Calculate a point estimate in the final state
+        estRet(i,s) = pointEstimate(n.retina);  
     end
 end
 
 %========== Statistical Data ===========%
 %Calculate wrapped error
-errRet = err(n.retina,estRet(:,:,end),truRet);
+errRet = err(n.retina,estRet,truRet);
 
 merr = x2rad(n.retina,errRet);
 radmean = circ_mean(merr,[],2);
@@ -131,13 +96,43 @@ end
 plot(x, acuity(N/2,:),'linewidth',1);
 xlabel('Position rel. to blindspot');
 subplot(nPlots,1,2);
-imagesc(x,x,retWeights); axis image;
-subplot(nPlots,1,3);
+imagesc(x,x,retWeights); axis image; title('Connectivity weights');
+subplot(nPlots,1,3); 
 centerRegion = round(0.25*N):round(0.75*N);
 imagesc(x(centerRegion),x(centerRegion),abs(interNeurDist(centerRegion,centerRegion))); axis image;
+title('Cortical distance between units');
 colorbar;
 
 %Outputs
 out.ret = {estRet,truRet,errRet};
 
-keyboard;
+function beforeUpdate(n)
+
+%This function is called just before each iteration (t) of the network during a simulation
+if n.t==1
+    %Update each input layer with the input from the world
+    setEnabled(n.retina,'retina',false);
+    setEnabled(n.retina,'retinalWorld',true);
+    
+    %Switch off response normalisation
+    n.retina.normalise = false;
+
+elseif n.t==2
+    %The stimuli and noise should only be present at t==1, so switch them off now.
+    setEnabled(n.retina,'retina',true);
+    setEnabled(n.retina,'retinalWorld',false);
+    
+    %Normalise all layers from herein
+    n.retina.normalise = true;
+end
+
+function myPlot(n,realRetPos)
+
+plotState(n.retina); ylim([0 40]);
+plot([realRetPos, realRetPos],ylim,'k','linewidth',4);
+if n.t==1
+    pause(0.5)
+else
+    pause(0.1);
+end
+cla;

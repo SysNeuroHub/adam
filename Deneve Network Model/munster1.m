@@ -10,7 +10,8 @@ p.addParameter('plotIt',true);          %Plot each iteration.
 p.addParameter('nSims',100);
 p.addParameter('nIter',10);
 p.addParameter('N',20);                 %Number of units per dimension in each layer
-p.addParameter('suppLayer','eye');
+p.addParameter('suppLayer','eye');      %Which layer is to be "adapted"?
+p.addParameter('suppStrength',0.5),     %How strong is the adaptation?
 p.addParameter('addNoise',true);
 p.parse(varargin{:});
 p = p.Results;
@@ -48,7 +49,7 @@ if ~isempty(n.p.suppLayer)
     suppLyr = n.(n.p.suppLayer);
     vmPrms = deneveLayer.defaultVMprms('NET2NET');
     trough = n.p.N/2;
-    gain = 1 - (vmPrms.k.*exp((cos(((1:n.p.N)-trough).*(2*pi/n.p.N))-1)./(vmPrms.sigma^2)));
+    gain = 1 - (p.suppStrength.*exp((cos(((1:n.p.N)-trough).*(2*pi/n.p.N))-1)./(vmPrms.sigma^2)));
     suppLyr.evtFun.preNormalisation = @(lyr) modulateGain(lyr,gain);
 end
 
@@ -156,7 +157,6 @@ subplot(2,1,2);
 toPlot = [round(0.35*p.N), round(0.4*p.N) 0.5*p.N];
 plot(tuning(:,toPlot),'linewidth',4);
 
-
 keyboard;
 end
 
@@ -176,9 +176,18 @@ plotState(n.eye);
 plotState(n.head);
 plot([wldHeadPos,wldHeadPos],ylim,':k','lineWidth',3);
 
+labels = ['R','E','S'];
+lyrs = [n.retinal,n.eye,n.head];
+for i=1:3
+    e = pointEstimate(lyrs(i));
+    h = text(e,max(lyrs(i).resp)+0.2*diff(ylim),labels(i),'color',lyrs(i).plotSetts.lineColor,'fontsize',20,'horizontalalignment','center');
+end
+
+
 %Plot 2D matrix response of hid
 subplot(2,1,2); cla
 plotState(n.basis);
+
 title(num2str(n.t));
 
 %Pauses for plotting
