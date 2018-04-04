@@ -361,6 +361,7 @@ classdef deneveLayer < dynamicprops
             %Remove time from class, put in deneve
             p = inputParser;
             p.addParameter('plotArgs',{}); %Param-value pairs passed to plot
+            p.addParameter('nameTag',true); %Add a floating name tag above the layer response
             p.addParameter('ax',gca);
             p.parse(varargin{:});
             
@@ -370,6 +371,9 @@ classdef deneveLayer < dynamicprops
                 estPos = pointEstimate(o);
                 plot(p.Results.ax,[estPos estPos],[0 max(o.resp(:))],'lineWidth',2,'Color',o.plotSetts.lineColor);
                 xlim([1,o.nUnits]);
+                if p.Results.nameTag
+                    text(estPos,max(o.resp)+0.2*diff(ylim),o.name,'color',o.plotSetts.lineColor,'fontsize',20,'horizontalalignment','center');
+                end
             else                      %If 2D
                 surf(o.resp);
             end

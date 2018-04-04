@@ -176,13 +176,6 @@ plotState(n.eye);
 plotState(n.head);
 plot([wldHeadPos,wldHeadPos],ylim,':k','lineWidth',3);
 
-labels = ['R','E','S'];
-lyrs = [n.retinal,n.eye,n.head];
-for i=1:3
-    e = pointEstimate(lyrs(i));
-    h = text(e,max(lyrs(i).resp)+0.2*diff(ylim),labels(i),'color',lyrs(i).plotSetts.lineColor,'fontsize',20,'horizontalalignment','center');
-end
-
 
 %Plot 2D matrix response of hid
 subplot(2,1,2); cla
